@@ -1,0 +1,1 @@
+tzookeeper=org.apache.dubbo.registry.zookeeper.TZookeeperRegistryFactory
