@@ -26,6 +26,7 @@
     <packaging>jar</packaging>
     <name>${project.artifactId}</name>
     <description>The rmi rpc module of dubbo project</description>
+    <!--<version>2.7.5</version>-->
     <properties>
         <skip_maven_deploy>false</skip_maven_deploy>
     </properties>
@@ -38,24 +39,25 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
+            <version>4.3.16.RELEASE</version>
         </dependency>
         <dependency>
             <groupId>org.apache.tuscany.sca</groupId>
             <artifactId>tuscany-interface</artifactId>
             <version>2.0-M3</version>
-            <scope>compile</scope>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>scallop</groupId>
             <artifactId>scallop-binding-rmi-runtime</artifactId>
             <version>2003.4</version>
-            <scope>compile</scope>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>cglib</groupId>
             <artifactId>cglib-nodep</artifactId>
             <version>2.1_3</version>
-            <scope>compile</scope>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 <repositories>
@@ -70,5 +72,17 @@
         </snapshots>
     </repository>
 </repositories>
+    <distributionManagement>
+        <repository>
+            <id>Nexus</id>
+            <name>dubbo2tuscany</name>
+            <url>http://192.168.0.102:8081/repository/thirdparty/</url>
+        </repository>
+        <!--<snapshotRepository>-->
+        <!--<id>nexus-repository</id>-->
+        <!--<name>tuohang-framework-REPOSITORY</name>-->
+        <!--<url>http://192.168.0.102:8081/repository/3rd-part/</url>-->
+        <!--</snapshotRepository>-->
+    </distributionManagement>
 
 </project>

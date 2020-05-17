@@ -30,6 +30,7 @@ import org.apache.tuscany.sca.interfacedef.java.JavaInterface;
 import net.sf.cglib.asm.ClassWriter;
 import net.sf.cglib.asm.Constants;
 import net.sf.cglib.asm.Type;
+import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.remoting.RemoteAccessException;
 import org.springframework.remoting.rmi.RmiBasedExporter;
 import org.springframework.remoting.rmi.RmiProxyFactoryBean;
@@ -70,13 +71,13 @@ public class TRmiProtocol extends AbstractProxyProtocol {
     @Override
     protected <T> Runnable doExport(final T impl, Class<T> type, URL url) throws RpcException {
         RmiServiceExporter rmiServiceExporter = createExporter(impl, type, url, false);
-        RmiServiceExporter genericServiceExporter = createExporter(impl, GenericService.class, url, true);
+       // RmiServiceExporter genericServiceExporter = createExporter(impl, GenericService.class, url, true); // rm to fix 1.8.0_121 error.
         return new Runnable() {
             @Override
             public void run() {
                 try {
                     rmiServiceExporter.destroy();
-                    genericServiceExporter.destroy();
+              //      genericServiceExporter.destroy();
                 } catch (Throwable e) {
                     logger.warn(e.getMessage(), e);
                 }
@@ -127,10 +128,11 @@ public class TRmiProtocol extends AbstractProxyProtocol {
         if (isGeneric) {
             serviceUrl = serviceUrl + "/" + GENERIC_KEY;
         }
+
         rmiProxyFactoryBean.setServiceUrl(serviceUrl);
         rmiProxyFactoryBean.setServiceInterface(serviceType);
         rmiProxyFactoryBean.setCacheStub(true);
-        rmiProxyFactoryBean.setLookupStubOnStartup(true);
+        rmiProxyFactoryBean.setLookupStubOnStartup(Boolean.parseBoolean(url.getParameter("lookup")) ? true:false); //启动默认不检测
         rmiProxyFactoryBean.setRefreshStubOnConnectFailure(true);
         rmiProxyFactoryBean.afterPropertiesSet();
         return (T) rmiProxyFactoryBean.getObject();
@@ -162,7 +164,6 @@ public class TRmiProtocol extends AbstractProxyProtocol {
         } else {
             rmiServiceExporter.setServiceName(url.getPath());
         }
-
 
         Class clazz = createInterface(type);
         rmiServiceExporter.setServiceInterface(clazz);

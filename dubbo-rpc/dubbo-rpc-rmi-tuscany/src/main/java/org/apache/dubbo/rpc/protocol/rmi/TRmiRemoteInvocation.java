@@ -37,7 +37,7 @@ public class TRmiRemoteInvocation extends RemoteInvocation {
      */
     public TRmiRemoteInvocation(MethodInvocation methodInvocation) {
         super(methodInvocation);
-        addAttribute(DUBBO_ATTACHMENTS_ATTR_NAME, new HashMap<>(RpcContext.getContext().getObjectAttachments()));
+        addAttribute(DUBBO_ATTACHMENTS_ATTR_NAME, new HashMap<>(RpcContext.getContext().getAttachments()));
     }
 
     /**
@@ -50,7 +50,7 @@ public class TRmiRemoteInvocation extends RemoteInvocation {
     public Object invoke(Object targetObject) throws NoSuchMethodException, IllegalAccessException,
             InvocationTargetException {
         RpcContext context = RpcContext.getContext();
-        context.setObjectAttachments((Map<String, Object>) getAttribute(DUBBO_ATTACHMENTS_ATTR_NAME));
+        context.setAttachments((Map<String, String>) getAttribute(DUBBO_ATTACHMENTS_ATTR_NAME));
         String generic = (String) getAttribute(GENERIC_KEY);
         if (StringUtils.isNotEmpty(generic)) {
             context.setAttachment(GENERIC_KEY, generic);
@@ -58,7 +58,7 @@ public class TRmiRemoteInvocation extends RemoteInvocation {
         try {
             return super.invoke(targetObject);
         } finally {
-            context.setObjectAttachments(null);
+            context.setAttachments(null);
         }
     }
 }

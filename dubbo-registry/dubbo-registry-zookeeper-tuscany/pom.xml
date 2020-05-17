@@ -63,4 +63,16 @@
             </snapshots>
         </repository>
     </repositories>
+    <distributionManagement>
+        <repository>
+            <id>Nexus</id>
+            <name>dubbo2tuscany</name>
+            <url>http://192.168.0.102:8081/repository/thirdparty/</url>
+        </repository>
+        <!--<snapshotRepository>-->
+            <!--<id>nexus-repository</id>-->
+             <!--<name>tuohang-framework-REPOSITORY</name>-->
+             <!--<url>http://192.168.0.102:8081/repository/3rd-part/</url>-->
+         <!--</snapshotRepository>-->
+    </distributionManagement>
 </project>

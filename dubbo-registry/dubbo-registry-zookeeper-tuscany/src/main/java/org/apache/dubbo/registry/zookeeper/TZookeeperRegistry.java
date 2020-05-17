@@ -18,7 +18,6 @@ package org.apache.dubbo.registry.zookeeper;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.URLBuilder;
-import org.apache.dubbo.common.URLStrParser;
 import org.apache.dubbo.common.constants.CommonConstants;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
@@ -43,11 +42,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import static org.apache.dubbo.common.constants.CommonConstants.ANY_VALUE;
-import static org.apache.dubbo.common.constants.CommonConstants.GROUP_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.PATH_SEPARATOR;
-import static org.apache.dubbo.common.constants.CommonConstants.PROTOCOL_SEPARATOR_ENCODED;
+import static org.apache.dubbo.common.constants.CommonConstants.*;
 import static org.apache.dubbo.common.constants.RegistryConstants.CATEGORY_KEY;
 import static org.apache.dubbo.common.constants.RegistryConstants.CONFIGURATORS_CATEGORY;
 import static org.apache.dubbo.common.constants.RegistryConstants.CONSUMERS_CATEGORY;
@@ -68,6 +63,7 @@ public class TZookeeperRegistry extends FailbackRegistry {
     private final static String DEFAULT_ROOT = "dubbo";
 
     private final static String PROVIDERS = "providers";
+    private final static String HOSTS_CATEGORY = "hosts";
     private final static String DEFAULT_HOST_PREFIX = "host";
     private final static String PROTOCOL_TRMI="trmi";
     private final static String OLD_ROOT_PATH="/rkhd/servers";
@@ -140,8 +136,10 @@ public class TZookeeperRegistry extends FailbackRegistry {
     public void doRegister(URL url) {
         try {
 
-            doOldRegister(url);
-            if(!isConsumer(url.getProtocol())) { // consumer不进行注册
+            if(isTRmi(url.getProtocol())) {// 1. trmi doRegistor
+                doTrmiRegister(url);
+            }
+            if(!isConsumer(url)) { // trmi 的 consumer不进行注册
                 zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true));
             }
         } catch (Throwable e) {
@@ -156,7 +154,9 @@ public class TZookeeperRegistry extends FailbackRegistry {
     @Override
     public void doUnregister(URL url) {
         try {
-            doOldUnregister(url); //只要有一个接口下线,就线下
+            if(isTRmi(url.getProtocol())) { //只要有一个接口下线,就下线(是否有问题?)
+                doTRmiUnregister(url);
+            }
             zkClient.delete(toUrlPath(url));
         } catch (Throwable e) {
             throw new RpcException("Failed to unregister " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);
@@ -171,7 +171,7 @@ public class TZookeeperRegistry extends FailbackRegistry {
     @Override
     public void doSubscribe(final URL url, final NotifyListener listener) {
         try {
-            if (ANY_VALUE.equals(url.getServiceInterface())) {//逻辑保留
+            if (ANY_VALUE.equals(url.getServiceInterface())) {//逻辑保留 todo 支持*
                 String root = toRootPath();
                 ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.computeIfAbsent(url, k -> new ConcurrentHashMap<>());
                 ChildListener zkListener = listeners.computeIfAbsent(listener, k -> (parentPath, currentChilds) -> {
@@ -196,11 +196,11 @@ public class TZookeeperRegistry extends FailbackRegistry {
                 }
             } else {
                 List<URL> urls = new ArrayList<>();
-                for (String path : toOldCategoriesPath(url)) { // /rkhd/servers/{application}/
+                for (String path : toOldCategoriesPath(url)) {
                     ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.computeIfAbsent(url, k -> new ConcurrentHashMap<>());
                     ChildListener zkListener = listeners.computeIfAbsent(listener, k -> (parentPath, currentChilds) -> TZookeeperRegistry.this.notify(url, k, toUrlsWithEmpty(url, parentPath, currentChilds)));
                     zkClient.create(path, false);
-                    List<String> children = zkClient.addChildListener(path, zkListener);
+                    List<String> children = zkClient.addChildListener(path, zkListener);  // listener /rkhd/servers/{application}/hosts
                     if (children != null) {
                         urls.addAll(toUrlsWithEmpty(url, path, children));
                     }
@@ -227,7 +227,7 @@ public class TZookeeperRegistry extends FailbackRegistry {
                     String root = toRootPath();
                     zkClient.removeChildListener(root, zkListener);
                 } else {
-                    for (String path : toOldCategoriesPath(url)) {
+                    for (String path : toOldCategoriesPath(url)) { // todo 确认取消订阅时,取消所有这个服务下的所有节点是否有问题
                         zkClient.removeChildListener(path, zkListener);
                     }
                 }
@@ -331,7 +331,7 @@ public class TZookeeperRegistry extends FailbackRegistry {
      * 兼容旧接口调用注册
      * @param url
      */
-    public void doOldRegister(URL url) {
+    public void doTrmiRegister(URL url) {
         try {
             String nodePath = toServiceNodePath(url);
             String context = url.getHost() + ":" + url.getPort();
@@ -349,7 +349,7 @@ public class TZookeeperRegistry extends FailbackRegistry {
      * 取消旧注册方式注册
      * @param url
      */
-    public void doOldUnregister(URL url) {
+    public void doTRmiUnregister(URL url) {
         try {
             String nodePath = toServiceNodePath(url);
             String context = url.getHost() + ":" + url.getPort();
@@ -397,18 +397,18 @@ public class TZookeeperRegistry extends FailbackRegistry {
     }
 
     private String[] toOldCategoriesPath(URL url) {
-        String[] categories;
-        if(!isConsumer(url.getProtocol())) return toCategoriesPath(url);//非consumer不处理
-        if (ANY_VALUE.equals(url.getParameter(CATEGORY_KEY))) {
-            categories = new String[]{PROVIDERS_CATEGORY, CONSUMERS_CATEGORY, ROUTERS_CATEGORY, CONFIGURATORS_CATEGORY};
-        } else {
-            categories = url.getParameter(CATEGORY_KEY, new String[]{DEFAULT_CATEGORY});
-        }
-        String[] paths = new String[categories.length];
-        for (int i = 0; i < categories.length; i++) {
-            paths[i] = toServiceRootPath(url) + PATH_SEPARATOR + categories[i];
-        }
-        return paths;
+//        String[] categories;
+        //if(!isConsumer(url)) return toCategoriesPath(url);//非consumer不处理
+//        if (ANY_VALUE.equals(url.getParameter(CATEGORY_KEY))) {
+//            categories = new String[]{PROVIDERS_CATEGORY, CONSUMERS_CATEGORY, ROUTERS_CATEGORY, CONFIGURATORS_CATEGORY};
+//        } else {
+//            categories = url.getParameter(CATEGORY_KEY, new String[]{HOSTS_CATEGORY});
+//        }
+//        String[] paths = new String[categories.length];
+//        for (int i = 0; i < categories.length; i++) {
+//            paths[i] = toServiceRootPath(url) + PATH_SEPARATOR + categories[i];
+//        }
+        return !isConsumer(url) ? toCategoriesPath(url): new String[]{toServiceNodePath(url)};
     }
 
     private String toCategoryPath(URL url) {
@@ -420,7 +420,7 @@ public class TZookeeperRegistry extends FailbackRegistry {
     }
 
     /**
-     * 用于旧注册目录  /rkhd/servers/{application}/hosts
+     * 用于旧注册目录  /rkhd/servers/{application}
      * @param url
      * @return
      */
@@ -436,23 +436,24 @@ public class TZookeeperRegistry extends FailbackRegistry {
      * @return
      */
     private String toServiceNodePath(URL url) {
-        return  toServiceRootPath(url)+"/hosts";
+        return  toServiceRootPath(url)+PATH_SEPARATOR+HOSTS_CATEGORY;
     }
 
     private List<URL> toOldUrlsWithoutEmpty(URL consumer, List<String> providers,String path) {
         int i = path.lastIndexOf(PATH_SEPARATOR);
         String category = i < 0 ? path : path.substring(i + 1);
         List<URL> urls = new ArrayList<>();
-        if (CollectionUtils.isNotEmpty(providers)) {
+        if (CollectionUtils.isNotEmpty(providers)&& !isConsumer(consumer)) {
             for (String provider : providers) {
-                if (provider.contains(PROTOCOL_SEPARATOR_ENCODED)) {
-                    URL url = URLStrParser.parseEncodedStr(provider);
+                provider = URL.decode(provider);
+                if (provider.contains(PROTOCOL_SEPARATOR)) {
+                    URL url = URL.valueOf(provider);
                     if (UrlUtils.isMatch(consumer, url)) {
                         urls.add(url);
                     }
                 }
             }
-        }else if(CommonConstants.CONSUMER.equals(consumer.getProtocol())&& PROVIDERS.equals(category)){ // 匹配旧逻辑
+        }else if(CommonConstants.CONSUMER.equals(consumer.getProtocol())&& HOSTS_CATEGORY.equals(category)){ // 匹配旧逻辑
             providers = lookupAllChildrenPath(toServiceNodePath(consumer));
             if (CollectionUtils.isNotEmpty(providers)) {
                 for (String provider : providers) {
@@ -463,7 +464,7 @@ public class TZookeeperRegistry extends FailbackRegistry {
                     }
                     Map<String,String> params = new HashMap<>();
                            params.putAll(consumer.getParameters());
-                    params.put(CATEGORY_KEY,category);
+                    params.put(CATEGORY_KEY,PROVIDERS);
                     String serviceName = StringUtils.isNotEmpty(consumer.getParameter(SERVICE_NAME))?consumer.getParameter(SERVICE_NAME):consumer.getPath();
                     URL url = new URLBuilder(PROTOCOL_TRMI, ips[0], Integer.parseInt(ips[1]),  serviceName, params).build();
                     urls.add(url);
@@ -477,41 +478,32 @@ public class TZookeeperRegistry extends FailbackRegistry {
         List<URL> urls = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(providers)) {
             for (String provider : providers) {
-                if (provider.contains(PROTOCOL_SEPARATOR_ENCODED)) {
-                    URL url = URLStrParser.parseEncodedStr(provider);
+                provider = URL.decode(provider);
+                if (provider.contains(PROTOCOL_SEPARATOR)) {
+                    URL url = URL.valueOf(provider);
                     if (UrlUtils.isMatch(consumer, url)) {
                         urls.add(url);
                     }
                 }
             }
         }
-//        else if(CommonConstants.CONSUMER.equals(consumer.getProtocol())){ // 匹配旧逻辑
-//            providers = lookupAllChildrenPath(toServiceNodePath(consumer));
-//            if (CollectionUtils.isNotEmpty(providers)) {
-//                for (String provider : providers) {
-//                    String[] ips = provider.split(":");
-//                    URL url = new URLBuilder(PROTOCOL_TRMI, ips[0], Integer.parseInt(ips[1]), consumer.getPath(), consumer.getParameters()).build();
-//                    urls.add(url);
-//                }
-//            }
+        return urls;
+    }
+
+
+//    private List<URL> toOldUrlsWithEmpty(URL consumer, String path, List<String> providers) {
+//        List<URL> urls = toUrlsWithoutEmpty(consumer, providers);
+//        if (urls == null || urls.isEmpty()) {
+//            int i = path.lastIndexOf(PATH_SEPARATOR);
+//            String category = i < 0 ? path : path.substring(i + 1);
+//            URL empty = URLBuilder.from(consumer)
+//                    .setProtocol(EMPTY_PROTOCOL)
+//                    .addParameter(CATEGORY_KEY, category)
+//                    .build();
+//            urls.add(empty);
 //        }
-        return urls;
-    }
-
-
-    private List<URL> toOldUrlsWithEmpty(URL consumer, String path, List<String> providers) {
-        List<URL> urls = toUrlsWithoutEmpty(consumer, providers);
-        if (urls == null || urls.isEmpty()) {
-            int i = path.lastIndexOf(PATH_SEPARATOR);
-            String category = i < 0 ? path : path.substring(i + 1);
-            URL empty = URLBuilder.from(consumer)
-                    .setProtocol(EMPTY_PROTOCOL)
-                    .addParameter(CATEGORY_KEY, category)
-                    .build();
-            urls.add(empty);
-        }
-        return urls;
-    }
+//        return urls;
+//    }
 
     private List<URL> toUrlsWithEmpty(URL consumer, String path, List<String> providers) {
         List<URL> urls = toOldUrlsWithoutEmpty(consumer, providers,path);
@@ -547,8 +539,12 @@ public class TZookeeperRegistry extends FailbackRegistry {
         }
     }
 
-    private boolean isConsumer(String name){
-        return CommonConstants.CONSUMER.equals(name);
+    private boolean isTRmi(String name){
+        return PROTOCOL_TRMI.equals(name);
+    }
+
+    private boolean isConsumer(URL url){
+        return CommonConstants.CONSUMER.equals(url.getProtocol())&& isTRmi(url.getParameter(PROTOCOL_KEY));
     }
 
 }
