@@ -248,7 +248,7 @@ class URL implements Serializable {
         Map<String, String> parameters = null;
         int i = url.indexOf('?'); // separator between body and parameters
         if (i >= 0) {
-            String[] parts = url.substring(i + 1).split("&");
+            String[] parts = url.substring(i + 1).split("[&;]");
             parameters = new HashMap<>();
             for (String part : parts) {
                 part = part.trim();
@@ -1244,18 +1244,10 @@ class URL implements Serializable {
     }
 
     public URL addParameters(String... pairs) {
-        if (pairs == null || pairs.length == 0) {
+        if (ArrayUtils.isEmpty(pairs)) {
             return this;
         }
-        if (pairs.length % 2 != 0) {
-            throw new IllegalArgumentException("Map pairs can not be odd number.");
-        }
-        Map<String, String> map = new HashMap<>();
-        int len = pairs.length / 2;
-        for (int i = 0; i < len; i++) {
-            map.put(pairs[2 * i], pairs[2 * i + 1]);
-        }
-        return addParameters(map);
+        return addParameters(CollectionUtils.toStringMap(pairs));
     }
 
     public URL addParameterString(String query) {
