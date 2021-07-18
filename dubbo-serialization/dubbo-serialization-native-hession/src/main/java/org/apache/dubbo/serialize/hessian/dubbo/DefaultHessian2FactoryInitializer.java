@@ -14,17 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.dubbo.remoting.zookeeper.curator;
+package org.apache.dubbo.serialize.hessian.dubbo;
 
-import org.apache.dubbo.common.URL;
-import org.apache.dubbo.remoting.zookeeper.ZookeeperClient;
-import org.apache.dubbo.remoting.zookeeper.AbstractZookeeperTransporter;
+import org.apache.dubbo.serialize.hessian.Hessian2SerializerFactory;
 
-public class CuratorZookeeperTransporter extends AbstractZookeeperTransporter {
+import com.caucho.hessian.io.SerializerFactory;
+
+public class DefaultHessian2FactoryInitializer extends AbstractHessian2FactoryInitializer {
     @Override
-    public ZookeeperClient createZookeeperClient(URL url) {
-        return new CuratorZookeeperClient(url);
+    protected SerializerFactory createSerializerFactory() {
+        return new Hessian2SerializerFactory();
     }
-
-
 }
